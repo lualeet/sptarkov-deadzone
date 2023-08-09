@@ -3,7 +3,7 @@
   <PropertyGroup>
     <TargetFramework>net472</TargetFramework>
     <AssemblyName>DeadzoneMod</AssemblyName>
-    <Description>An sptarkov mod to add free hip aim (aka deadzone)</Description>
+    <Description>An sptarkov mod to add deadzone in hip aim</Description>
     <Version>1.0.0</Version>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <LangVersion>latest</LangVersion>

@@ -1,14 +1,15 @@
 ﻿using System.Collections.Generic;
-using System.Reflection;
-using Aki.Reflection.Patching;
 using BepInEx;
 using BepInEx.Configuration;
 using HarmonyLib;
 using UnityEngine;
+using EFT;
+using EFT.Animations;
 
 namespace DeadzoneMod;
 
-public struct WeaponSettingsOverrides {
+public struct WeaponSettingsOverrides
+{
     public bool Enabled;
     public bool UseDefault;
     public float Position;
@@ -23,7 +24,8 @@ public struct WeaponSettingsOverrides {
         float Sensitivity = 0.25f,
         float MaxAngle = 5.0f,
         float AimMultiplier = 0.0f
-    ) {
+    )
+    {
         this.Enabled = Enabled;
         this.UseDefault = UseDefault;
         this.Position = Position;
@@ -33,19 +35,22 @@ public struct WeaponSettingsOverrides {
     }
 }
 
-public struct WeaponSettings {
+public struct WeaponSettings
+{
     public ConfigEntry<bool> Enabled;
-    public bool UseDefault { get => UseDefaultConfig == null ? false : UseDefaultConfig.Value; }
-    private ConfigEntry<bool> UseDefaultConfig;
-    public ConfigEntry<float> Position;
-    public ConfigEntry<float> Sensitivity;
-    public ConfigEntry<float> MaxAngle;
-    public ConfigEntry<float> AimMultiplier;
+
+    public readonly bool UseDefault => UseDefaultConfig.Value;
+    public readonly ConfigEntry<bool> UseDefaultConfig;
+    public readonly ConfigEntry<float> Position;
+    public readonly ConfigEntry<float> Sensitivity;
+    public readonly ConfigEntry<float> MaxAngle;
+    public readonly ConfigEntry<float> AimMultiplier;
     public WeaponSettings(
         ConfigFile Config,
         WeaponSettingsOverrides settings,
         string GroupName = "Group"
-    ) {
+    )
+    {
         string group = $"{GroupName}s";
         Enabled = Config.Bind(group, $"{GroupName} deadzone enabled", settings.Enabled, new ConfigDescription("Will deadzone be enabled"));
         UseDefaultConfig = GroupName == "Default" ? null : Config.Bind(group, $"{GroupName} disable", settings.UseDefault, new ConfigDescription("Will this group use default values instead"));
@@ -56,37 +61,43 @@ public struct WeaponSettings {
     }
 }
 
-public struct WeaponSettingsGroup {
-    public Dictionary<string, WeaponSettings> settings = new();
+public struct WeaponSettingsGroup
+{
+    readonly Dictionary<string, WeaponSettings> settings = new();
     public WeaponSettings fallback;
-    public WeaponSettingsGroup(WeaponSettings fallback) {
+    public WeaponSettingsGroup(WeaponSettings fallback)
+    {
         this.fallback = fallback;
     }
 
-    public WeaponSettings this[string index] {
-        get {
-            WeaponSettings chosen;
+    public readonly WeaponSettings this[string index]
+    {
+        get
+        {
+            if (settings.TryGetValue(index, out WeaponSettings chosen))
+                return chosen;
 
-            if (!settings.TryGetValue(index, out chosen))
-                return fallback;
-
-            return chosen;
+            return fallback;
         }
         set => settings.Add(index, value);
     }
 }
 
-public struct PluginSettings {
+public struct PluginSettings
+{
     public bool Initialized;
     public ConfigEntry<bool> Enabled;
     public WeaponSettingsGroup WeaponSettings;
 }
 
-[BepInPlugin("org.bepinex.plugins.deadzonemod", "DeadzoneMod", "1.0.0.0")]
-public class Plugin : BaseUnityPlugin {
+[BepInPlugin("me.lualeet.deadzone", "Deadzone", "1.0.0.0")]
+public class Plugin : BaseUnityPlugin
+{
     public static PluginSettings Settings = new();
+    public static bool Enabled => Settings.Enabled != null && Settings.Enabled.Value;
 
-    void Awake() {
+    void Awake()
+    {
         Settings.Enabled = Config.Bind("Values", "Global deadzone enabled", true, new ConfigDescription("Will deadzone be enabled for any group"));
 
         Settings.WeaponSettings = new WeaponSettingsGroup(
@@ -99,60 +110,38 @@ public class Plugin : BaseUnityPlugin {
             )
         );
 
-        Settings.WeaponSettings["pistol"] = new WeaponSettings(
-            Config,
-            new WeaponSettingsOverrides(
-                Position: 0.0f
-            ),
-            "Pistol"
-        );
-
-        Settings.WeaponSettings["shotgun"] = new WeaponSettings(
-            Config,
-            new WeaponSettingsOverrides(
-                UseDefault: true
-            ),
-            "Shotgun"
-        );
-
         Settings.Initialized = true;
-        new DeadzonePatch().Enable();
+        DeadzonePatch.Enable();
+    }
+
+    public void Log(object data)
+    {
+        Logger.LogWarning(data);
     }
 }
 
-public class DeadzonePatch : ModulePatch {
-    static Vector2 lastYawPitch;
-    static float cumulativePitch = 0f;
-    static float cumulativeYaw = 0f;
-
-    static float aimSmoothed = 0f;
-    static readonly System.Diagnostics.Stopwatch aimWatch = new();
-
-    protected override MethodBase GetTargetMethod()
-        => typeof(EFT.Animations.ProceduralWeaponAnimation)
-            .GetMethod("AvoidObstacles", BindingFlags.Instance | BindingFlags.Public);
-
+public class DeadzonePatch
+{
     static Quaternion MakeQuaternionDelta(Quaternion from, Quaternion to)
-        => (to * Quaternion.Inverse(from));
+        => to * Quaternion.Inverse(from);
 
-    static void SetRotationLocal(ref float yaw, ref float pitch) {
-        if (yaw < 0)
-            yaw += 360; // dont feel like doing this properly thanks
-
-        if (pitch < 0)
-            pitch += 360;
+    static void SetRotationWrapped(ref float yaw, ref float pitch)
+    {
+        // I prefer using (-180; 180) euler angle range over (0; 360)
+        // However, wrapping the angles is easier with (0; 360), so temporarily cast it
+        if (yaw < 0) yaw += 360;
+        if (pitch < 0) pitch += 360;
 
         pitch %= 360;
         yaw %= 360;
 
-        if (yaw > 180)
-            yaw -= 360;
-
-        if (pitch > 180)
-            pitch -= 360;
+        // Now cast it back
+        if (yaw > 180) yaw -= 360;
+        if (pitch > 180) pitch -= 360;
     }
 
-    static void SetRotationClamped(ref float yaw, ref float pitch, float maxAngle) {
+    static void SetRotationClamped(ref float yaw, ref float pitch, float maxAngle)
+    {
         Vector2 clampedVector
             = Vector2.ClampMagnitude(
                 new Vector2(yaw, pitch),
@@ -163,24 +152,38 @@ public class DeadzonePatch : ModulePatch {
         pitch = clampedVector.y;
     }
 
-    [PatchPostfix]
-    static void PostFix(EFT.Animations.ProceduralWeaponAnimation __instance, EFT.Player.FirearmController ___firearmController_0) {
-        if (!Plugin.Settings.Enabled.Value) return;
+    static readonly System.Diagnostics.Stopwatch aimWatch = new();
+    static float GetDeltaTime()
+    {
+        float deltaTime = aimWatch.Elapsed.Milliseconds / 1000f;
+        aimWatch.Reset();
+        aimWatch.Start();
 
-        if (!___firearmController_0) return;
+        return deltaTime;
+    }
 
-        EFT.Player _player = (EFT.Player)AccessTools.Field(typeof(EFT.Player.ItemHandsController), "_player").GetValue(___firearmController_0);
-        if (_player.IsAI) return;
+    static float aimSmoothed = 0f;
 
-        // Degrees, yaw pitch
-        Vector2 currentYawPitch = new(_player.MovementContext.Yaw, _player.MovementContext.Pitch);
+    static void UpdateAimSmoothed(ProceduralWeaponAnimation animationInstance)
+    {
+        float deltaTime = GetDeltaTime();
 
+        // TODO: use aiming time
+        // Maybe it can be extracted from ProceduralWeaponAnimation?
+        aimSmoothed = Mathf.Lerp(aimSmoothed, animationInstance.IsAiming ? 1f : 0f, deltaTime * 6f);
+    }
+
+    static float cumulativePitch = 0f;
+    static float cumulativeYaw = 0f;
+
+    static Vector2 lastYawPitch;
+
+    static void UpdateDeadzoneRotation(Vector2 currentYawPitch, WeaponSettings settings)
+    {
         Quaternion lastRotation = Quaternion.Euler(lastYawPitch.x, lastYawPitch.y, 0);
         Quaternion currentRotation = Quaternion.Euler(currentYawPitch.x, currentYawPitch.y, 0);
 
-        WeaponSettings settings = Plugin.Settings.WeaponSettings[___firearmController_0.Item.WeapClass];
-        if (settings.UseDefault)
-            settings = Plugin.Settings.WeaponSettings.fallback;
+        lastYawPitch = currentYawPitch;
 
         // all euler angles should go to hell
         lastRotation = Quaternion.SlerpUnclamped(currentRotation, lastRotation, settings.Sensitivity.Value);
@@ -190,22 +193,20 @@ public class DeadzonePatch : ModulePatch {
         cumulativeYaw += delta.x;
         cumulativePitch += delta.y;
 
-        SetRotationLocal(ref cumulativeYaw, ref cumulativePitch);
-
-        lastYawPitch = currentYawPitch;
+        SetRotationWrapped(ref cumulativeYaw, ref cumulativePitch);
 
         SetRotationClamped(ref cumulativeYaw, ref cumulativePitch, settings.MaxAngle.Value);
+    }
 
-        float deltaTime = aimWatch.Elapsed.Milliseconds / 1000f;
-
-        aimWatch.Reset();
-        aimWatch.Start();
-
-        aimSmoothed = Mathf.Lerp(aimSmoothed, __instance.IsAiming ? 1f : 0f, deltaTime * 6f);
-
+    static void ApplyDeadzone(ProceduralWeaponAnimation animationInstance, WeaponSettings settings)
+    {
         float aimMultiplier = 1f - ((1f - settings.AimMultiplier.Value) * aimSmoothed);
 
-        __instance.HandsContainer.WeaponRootAnim.LocalRotateAround(
+        Transform weaponRootAnim = animationInstance.HandsContainer.WeaponRootAnim;
+
+        if (weaponRootAnim == null) return;
+
+        weaponRootAnim.LocalRotateAround(
             Vector3.up * settings.Position.Value,
             new Vector3(
                 cumulativePitch * aimMultiplier,
@@ -214,10 +215,59 @@ public class DeadzonePatch : ModulePatch {
             )
         );
 
-        // Not doing this messes up pivot for all offsets after this lmao
-        __instance.HandsContainer.WeaponRootAnim.LocalRotateAround(
+        // Not doing this messes up pivot for all offsets after this
+        weaponRootAnim.LocalRotateAround(
             Vector3.up * -settings.Position.Value,
             Vector3.zero
         );
+    }
+
+    static void PatchedUpdate(Player player, ProceduralWeaponAnimation weaponAnimation)
+    {
+        Vector2 currentYawPitch = new(player.MovementContext.Yaw, player.MovementContext.Pitch);
+
+        WeaponSettings settings;
+
+        settings = Plugin.Settings.WeaponSettings.fallback;
+
+        UpdateDeadzoneRotation(currentYawPitch, settings);
+
+        UpdateAimSmoothed(weaponAnimation);
+
+        ApplyDeadzone(weaponAnimation, settings);
+    }
+
+    // BepInEx
+
+    static public void Enable()
+    {
+        Harmony.CreateAndPatchAll(typeof(DeadzonePatch));
+    }
+
+    [HarmonyPatch(typeof(Player), "VisualPass")]
+    [HarmonyPrefix]
+    static void FindLocalProceduralWeaponAnimation(Player __instance)
+    {
+        if (!Plugin.Enabled) return;
+
+        if (!__instance.IsYourPlayer) return;
+
+        localPlayer = __instance;
+        localWeaponAnimation = __instance.ProceduralWeaponAnimation;
+    }
+
+    static Player localPlayer;
+    static ProceduralWeaponAnimation localWeaponAnimation;
+
+    [HarmonyPatch(typeof(ProceduralWeaponAnimation), "AvoidObstacles")]
+    [HarmonyPostfix]
+    static void WeaponAnimationPatch(ProceduralWeaponAnimation __instance)
+    {
+        if (!Plugin.Enabled) return;
+
+        if (localPlayer == null) return;
+        if (__instance != localWeaponAnimation) return;
+
+        PatchedUpdate(localPlayer, localWeaponAnimation);
     }
 }
