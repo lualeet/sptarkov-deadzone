@@ -12,7 +12,7 @@ An SPT mod which adds insurgency style deadzone/free aim.
     ### Manual method
     Find all required dlls in your SPT folder, and copy them to the ``dependencies`` folder.
 
-    For a list of all required dlls, open ``update_bin.sh`` in a text editor and find
+    For a list of all required dlls, open ``update_bin.sh`` in a text editor and find:
     ```bash
     # List of required assemblies
     populateFile "0Harmony";
@@ -25,7 +25,7 @@ An SPT mod which adds insurgency style deadzone/free aim.
 - ## Compile
     run `dotnet build`.
 
-    output assembly wil be output to ``./bin/Debug/net472/DeadzoneMod.dll``.
+    output assembly will be saved to ``./bin/Debug/net472/DeadzoneMod.dll``.
 
 # Installing
 Copy ``DeadzoneMod.dll`` to ``$SPT/BepInEx/plugins/``.
