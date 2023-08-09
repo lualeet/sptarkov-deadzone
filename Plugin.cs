@@ -51,15 +51,22 @@ public struct WeaponSettings {
 }
 
 public struct WeaponSettingsGroup {
-    public WeaponSettings pistol;
+    public Dictionary<string, WeaponSettings> settings = new();
     public WeaponSettings fallback;
-    public WeaponSettingsGroup(WeaponSettings fallback, WeaponSettings pistol) {
+    public WeaponSettingsGroup(WeaponSettings fallback) {
         this.fallback = fallback;
-        this.pistol = pistol;
     }
 
     public WeaponSettings this[string index] {
-        get => (index == "pistol" ? pistol : fallback); // lol amazing
+        get {
+            WeaponSettings chosen;
+
+            if (!settings.TryGetValue(index, out chosen))
+                return fallback;
+
+            return chosen;
+        }
+        set => settings.Add(index, value);
     }
 }
 
@@ -80,19 +87,18 @@ public class Plugin : BaseUnityPlugin {
             new WeaponSettings(
                 Config,
                 new WeaponSettingsOverrides( // no idea why this being empty breaks it
-                    true,
-                    0.2f
+                    Position: 0.2f
                 ),
                 "Default"
-            ),
-            new WeaponSettings(
-                Config,
-                new WeaponSettingsOverrides(
-                    true,
-                    0.0f
-                ),
-                "Pistol"
             )
+        );
+
+        Settings.WeaponSettings["pistol"] = new WeaponSettings(
+            Config,
+            new WeaponSettingsOverrides(
+                Position: 0.0f
+            ),
+            "Pistol"
         );
 
         Settings.Initialized = true;
@@ -189,6 +195,12 @@ public class DeadzonePatch : ModulePatch {
                 0,
                 cumulativeYaw * aimMultiplier
             )
+        );
+
+        // Not doing this messes up pivot for all offsets after this lmao
+        __instance.HandsContainer.WeaponRootAnim.LocalRotateAround(
+            Vector3.up * -settings.Position.Value,
+            Vector3.zero
         );
     }
 }
