@@ -17,7 +17,7 @@ public struct WeaponSettingsOverrides {
 
     public WeaponSettingsOverrides(
         bool Enabled = true,
-        float Position = 0.2f,
+        float Position = 0.1f,
         float Sensitivity = 0.25f,
         float MaxAngle = 5.0f,
         float AimMultiplier = 0.0f
@@ -87,7 +87,7 @@ public class Plugin : BaseUnityPlugin {
             new WeaponSettings(
                 Config,
                 new WeaponSettingsOverrides( // no idea why this being empty breaks it
-                    Position: 0.2f
+                    Position: 0.1f
                 ),
                 "Default"
             )
@@ -105,6 +105,7 @@ public class Plugin : BaseUnityPlugin {
         new DeadzonePatch().Enable();
     }
 }
+
 public class DeadzonePatch : ModulePatch {
     static Vector2 lastYawPitch;
     static float cumulativePitch = 0f;
