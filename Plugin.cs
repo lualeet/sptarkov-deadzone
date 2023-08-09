@@ -10,6 +10,7 @@ namespace DeadzoneMod;
 
 public struct WeaponSettingsOverrides {
     public bool Enabled;
+    public bool UseDefault;
     public float Position;
     public float Sensitivity;
     public float MaxAngle;
@@ -17,12 +18,14 @@ public struct WeaponSettingsOverrides {
 
     public WeaponSettingsOverrides(
         bool Enabled = true,
+        bool UseDefault = false,
         float Position = 0.1f,
         float Sensitivity = 0.25f,
         float MaxAngle = 5.0f,
         float AimMultiplier = 0.0f
     ) {
         this.Enabled = Enabled;
+        this.UseDefault = UseDefault;
         this.Position = Position;
         this.Sensitivity = Sensitivity;
         this.MaxAngle = MaxAngle;
@@ -32,6 +35,8 @@ public struct WeaponSettingsOverrides {
 
 public struct WeaponSettings {
     public ConfigEntry<bool> Enabled;
+    public bool UseDefault { get => UseDefaultConfig == null ? false : UseDefaultConfig.Value; }
+    private ConfigEntry<bool> UseDefaultConfig;
     public ConfigEntry<float> Position;
     public ConfigEntry<float> Sensitivity;
     public ConfigEntry<float> MaxAngle;
@@ -43,6 +48,7 @@ public struct WeaponSettings {
     ) {
         string group = $"{GroupName}s";
         Enabled = Config.Bind(group, $"{GroupName} deadzone enabled", settings.Enabled, new ConfigDescription("Will deadzone be enabled"));
+        UseDefaultConfig = GroupName == "Default" ? null : Config.Bind(group, $"{GroupName} disable", settings.UseDefault, new ConfigDescription("Will this group use default values instead"));
         Position = Config.Bind(group, $"{GroupName} deadzone pivot", settings.Position, new ConfigDescription("How far back will the deadzone pivot"));
         Sensitivity = Config.Bind(group, $"{GroupName} deadzone sensitivity", settings.Sensitivity, new ConfigDescription("How fast will the gun move (less = slower)"));
         MaxAngle = Config.Bind(group, $"{GroupName} max deadzone angle", settings.MaxAngle, new ConfigDescription("How much will the gun be able to move (degrees)"));
@@ -99,6 +105,14 @@ public class Plugin : BaseUnityPlugin {
                 Position: 0.0f
             ),
             "Pistol"
+        );
+
+        Settings.WeaponSettings["shotgun"] = new WeaponSettings(
+            Config,
+            new WeaponSettingsOverrides(
+                UseDefault: true
+            ),
+            "Shotgun"
         );
 
         Settings.Initialized = true;
@@ -165,6 +179,8 @@ public class DeadzonePatch : ModulePatch {
         Quaternion currentRotation = Quaternion.Euler(currentYawPitch.x, currentYawPitch.y, 0);
 
         WeaponSettings settings = Plugin.Settings.WeaponSettings[___firearmController_0.Item.WeapClass];
+        if (settings.UseDefault)
+            settings = Plugin.Settings.WeaponSettings.fallback;
 
         // all euler angles should go to hell
         lastRotation = Quaternion.SlerpUnclamped(currentRotation, lastRotation, settings.Sensitivity.Value);
