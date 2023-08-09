@@ -126,33 +126,33 @@ public class DeadzonePatch : ModulePatch {
     static float cumulativeYaw = 0f;
 
     static float aimSmoothed = 0f;
-    static System.Diagnostics.Stopwatch aimWatch = new();
+    static readonly System.Diagnostics.Stopwatch aimWatch = new();
 
     protected override MethodBase GetTargetMethod()
         => typeof(EFT.Animations.ProceduralWeaponAnimation)
             .GetMethod("AvoidObstacles", BindingFlags.Instance | BindingFlags.Public);
 
-    static Quaternion makeQuaternionDelta(Quaternion from, Quaternion to)
+    static Quaternion MakeQuaternionDelta(Quaternion from, Quaternion to)
         => (to * Quaternion.Inverse(from));
 
-    static void setRotationLocal(ref float yaw, ref float pitch) {
+    static void SetRotationLocal(ref float yaw, ref float pitch) {
         if (yaw < 0)
-            yaw = yaw + 360; // dont feel like doing this properly thanks
+            yaw += 360; // dont feel like doing this properly thanks
 
         if (pitch < 0)
-            pitch = pitch + 360;
+            pitch += 360;
 
         pitch %= 360;
         yaw %= 360;
 
         if (yaw > 180)
-            yaw = yaw - 360;
+            yaw -= 360;
 
         if (pitch > 180)
-            pitch = pitch - 360;
+            pitch -= 360;
     }
 
-    static void setRotationClamped(ref float yaw, ref float pitch, float maxAngle) {
+    static void SetRotationClamped(ref float yaw, ref float pitch, float maxAngle) {
         Vector2 clampedVector
             = Vector2.ClampMagnitude(
                 new Vector2(yaw, pitch),
@@ -173,7 +173,7 @@ public class DeadzonePatch : ModulePatch {
         if (_player.IsAI) return;
 
         // Degrees, yaw pitch
-        Vector2 currentYawPitch = new Vector2(_player.MovementContext.Yaw, _player.MovementContext.Pitch);
+        Vector2 currentYawPitch = new(_player.MovementContext.Yaw, _player.MovementContext.Pitch);
 
         Quaternion lastRotation = Quaternion.Euler(lastYawPitch.x, lastYawPitch.y, 0);
         Quaternion currentRotation = Quaternion.Euler(currentYawPitch.x, currentYawPitch.y, 0);
@@ -185,16 +185,16 @@ public class DeadzonePatch : ModulePatch {
         // all euler angles should go to hell
         lastRotation = Quaternion.SlerpUnclamped(currentRotation, lastRotation, settings.Sensitivity.Value);
 
-        Vector3 delta = makeQuaternionDelta(lastRotation, currentRotation).eulerAngles;
+        Vector3 delta = MakeQuaternionDelta(lastRotation, currentRotation).eulerAngles;
 
         cumulativeYaw += delta.x;
         cumulativePitch += delta.y;
 
-        setRotationLocal(ref cumulativeYaw, ref cumulativePitch);
+        SetRotationLocal(ref cumulativeYaw, ref cumulativePitch);
 
         lastYawPitch = currentYawPitch;
 
-        setRotationClamped(ref cumulativeYaw, ref cumulativePitch, settings.MaxAngle.Value);
+        SetRotationClamped(ref cumulativeYaw, ref cumulativePitch, settings.MaxAngle.Value);
 
         float deltaTime = aimWatch.Elapsed.Milliseconds / 1000f;
 
