@@ -128,7 +128,7 @@ public class DeadzonePatch
 {
 
     static public void Enable()
-        => Harmony.CreateAndPatchAll(typeof(Deadzone));
+        => Harmony.CreateAndPatchAll(typeof(DeadzonePatch));
 
     [HarmonyPatch(typeof(Player), "VisualPass")]
     [HarmonyPrefix]
